@@ -72,7 +72,6 @@ pyparsing==3.2.3
 PySastrawi==1.2.0
 python-dateutil==2.9.0.post0
 pytz==2025.2
-pywin32==311
 PyYAML==6.0.2
 pyzmq==27.0.0
 referencing==0.36.2
@@ -126,4 +125,5 @@ wordcloud==1.9.4
 wordseg==0.0.2
 wrapt==1.17.2
 zh_core_web_md @ https://github.com/explosion/spacy-models/releases/download/zh_core_web_md-3.8.0/zh_core_web_md-3.8.0-py3-none-any.whl#sha256=bcf300540fbd15b1b0aac358f327f2a31de8992b346162d5600f843514da0e98
+
 
