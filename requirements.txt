@@ -104,7 +104,7 @@ thinc==8.3.6
 threadpoolctl==3.6.0
 tokenizers==0.21.2
 toml==0.10.2
-torch==2.7.1+cpu
+torch==2.7.1
 torchaudio==2.7.1
 torchvision==0.22.1
 tornado==6.5.1
@@ -126,4 +126,5 @@ wordcloud==1.9.4
 wordseg==0.0.2
 wrapt==1.17.2
 zh_core_web_md @ https://github.com/explosion/spacy-models/releases/download/zh_core_web_md-3.8.0/zh_core_web_md-3.8.0-py3-none-any.whl#sha256=bcf300540fbd15b1b0aac358f327f2a31de8992b346162d5600f843514da0e98
+
 
