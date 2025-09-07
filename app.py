@@ -11,6 +11,7 @@ import spacy
 from wordcloud import WordCloud
 import sqlite3
 from pathlib import Path
+import plotly.express as px
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -390,6 +391,80 @@ def handle_upload_flow():
     # Word clouds (one per symptom)
     render_wordclouds_by_label(out_df)
 
+def show_support_prompt(pred_label: str, probs: dict | None):
+    """Show a gentle nudge to seek help when we predict a mental-health label."""
+    label = (pred_label or "").strip()
+    lcl = label.lower()
+    if lcl in {"normal", "unknown", ""}:
+        return  # nothing to show
+
+    # If we have probabilities, use the model's confidence to tune the tone
+    conf = None
+    if isinstance(probs, dict) and label in probs:
+        try:
+            conf = float(probs[label])
+        except Exception:
+            conf = None
+
+    # Softer when confidence is low; stronger when confidence is decent
+    if conf is not None and conf < 0.55:
+        st.info(
+            "This analysis isn’t certain, but if the description **resonates** with you, "
+            "consider talking with someone you trust or a healthcare professional."
+        )
+    else:
+        st.warning(
+            f"Our analysis suggests signs related to **{label}**. "
+            "If this reflects how you’re feeling, reaching out for support can help."
+        )
+
+    with st.expander("Ways to get help"):
+        st.markdown(
+            "- Talk to a trusted friend or family member\n"
+            "- Consider a licensed therapist or counselor\n"
+            "- If you’re in immediate danger or thinking of harming yourself or others, "
+            "**call your local emergency number right away**."
+        )
+
+def plot_contrib_bars(ex):
+    """Horizontal bar chart for token contributions (push vs pull)."""
+    rows = []
+    for tok, w in (ex.get("pos_contrib") or []):
+        rows.append({"token": tok, "weight": float(w), "direction": "push"})
+    for tok, w in (ex.get("neg_contrib") or []):
+        rows.append({"token": tok, "weight": float(w), "direction": "pull"})
+
+    if not rows:
+        st.write("—")
+        return
+
+    df = pd.DataFrame(rows)
+    df["abs"] = df["weight"].abs()
+    df = df.sort_values("abs")  # small→big so the strongest appears at the bottom
+
+    import plotly.express as px
+    fig = px.bar(
+        df,
+        x="weight",
+        y="token",
+        orientation="h",
+        color="direction",
+        color_discrete_map={"push": "#88f0b4", "pull": "#e4897f"},
+        hover_data={"weight":":.4f", "direction": False, "abs": False},
+        labels={"weight": "Δ score", "token": ""},
+        title=None,
+    )
+    # zero line
+    fig.add_vline(x=0, line_width=1, line_color="rgba(200,200,200,0.6)")
+    # tidy up
+    fig.update_layout(
+        showlegend=False,
+        height=max(260, 36 * len(df)),
+        margin=dict(l=10, r=10, t=10, b=10),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def handle_enter_text_flow():
     user_input = st.text_area("Text:")
     if not (st.button("Predict") and user_input):
@@ -411,19 +486,18 @@ def handle_enter_text_flow():
     else:
         cleaned, tokens, ns, lemmas = user_input, [], [], []
 
-    # label = predict(cleaned, lang)
-    pre_text = to_preprocessed_text(lang, cleaned=cleaned, tokens=tokens, ns=ns, lemmas=lemmas)
+    label = predict(cleaned, lang)
     ex= predict_with_explanations(user_input, lang, top_k=8)
 
     st.write(f"**Detected Language:** {lang_name}")
     st.subheader("Prediction Result")
     st.write("**Original Text:**", user_input)
-    st.write("**Text (After Preprocessed):**", pre_text)
     st.write("**Predicted Label:**", ex["label"])
+    st.text("")
 
     # Probabilities
     if ex["probs"]:
-        st.caption("Prediction probabilities")
+        st.markdown("Prediction probabilities")
 
     # to DataFrame
     probs_df = (
@@ -434,7 +508,6 @@ def handle_enter_text_flow():
     probs_df["is_pred"] = probs_df["label"].eq(ex["label"])
     probs_df = probs_df.sort_values("prob")  # smallest at top
 
-    import plotly.express as px
 
     fig = px.bar(
         probs_df,
@@ -458,27 +531,18 @@ def handle_enter_text_flow():
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Top pushing/pulling tokens
-    c1, c2 = st.columns(2)
-
-    with c1:
-        st.caption(f"Tokens pushing **{ex['label']}**")
-        if ex["pos_contrib"]:
-            st.table(pd.DataFrame(ex["pos_contrib"], columns=["token", "weight"]))
-        else:
-            st.write("—")
-
-    with c2:
-        st.caption(f"Tokens pulling away from **{ex['label']}**")
-        if ex["neg_contrib"]:
-            st.table(pd.DataFrame(ex["neg_contrib"], columns=["token", "weight"]))
-        else:
-            st.write("—")
+    # Token contributions chart
+    st.markdown(f"Token contributions for **{ex['label']}** "
+           "(>0 pushes toward the label, <0 pulls away)")
+    plot_contrib_bars(ex)
 
     # Highlighted text
     st.text("")
     st.markdown("**Text with highlighted tokens**")
     st.write(ex["html_highlight"], unsafe_allow_html=True)
+    st.text("")
+    show_support_prompt(ex["label"], ex["probs"])
+
 
 def render_sidebar_feedback():
     st.sidebar.markdown("---")
