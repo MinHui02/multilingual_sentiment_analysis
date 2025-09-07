@@ -294,6 +294,57 @@ def render_wordcloud_for_language(df: pd.DataFrame, lang: str):
     ax.axis("off")
     st.pyplot(fig)
 
+def render_wordclouds_by_label(df: pd.DataFrame):
+    """One word cloud per predicted label (symptom), across languages."""
+    st.markdown("### Word Clouds by Symptom")
+
+    if df.empty or "Predicted Label" not in df.columns:
+        st.info("No predictions to render word clouds.")
+        return
+    
+    # Exclude Unknown (handles None/NaN/empty safely)
+    df = df[df["Predicted Label"].astype(str).str.strip().str.lower() != "unknown"]
+    if df.empty:
+        st.info("No non-unknown predictions to render word clouds.")
+        return
+
+    for label, group in df.groupby("Predicted Label", sort=False):
+        # Collect text for this label
+        blob_parts = []
+
+        # EN + MS can be used as-is
+        en_ms = group.loc[group["Language"].isin(["en", "ms"]), "Cleaned_text"].astype(str).tolist()
+        if en_ms:
+            blob_parts.append(" ".join(en_ms))
+
+        # Chinese languages: segment first so WordCloud sees 'words'
+        zh_mask = group["Language"].isin(["zh-cn", "zh-tw", "zh-hant"])
+        zh_texts = group.loc[zh_mask, "Cleaned_text"].astype(str).tolist()
+        if zh_texts:
+            zh_joined = "".join(zh_texts)                       # remove spaces between chars if any
+            zh_segmented = " ".join(jieba.cut(zh_joined, cut_all=False))
+            blob_parts.append(zh_segmented)
+
+        blob = " ".join(blob_parts)
+        blob = re.sub(r"http\S+|www\S+", "", blob).strip()
+        if not blob:
+            st.caption(f"*No text for {label}*")
+            continue
+
+        wc = WordCloud(
+            font_path=str(font_path),  # Path -> str
+            width=900,
+            height=420,
+            background_color="white"
+        ).generate(blob)
+
+        st.subheader(str(label))
+        fig, ax = plt.subplots(figsize=(10, 4.6))
+        ax.imshow(wc, interpolation="bilinear")
+        ax.axis("off")
+        st.pyplot(fig)
+
+
 def handle_upload_flow():
     files = st.file_uploader("Upload CSV(s)", type="csv", accept_multiple_files=True)
     if not files:
@@ -336,34 +387,8 @@ def handle_upload_flow():
 
     # Word cloud 
     st.markdown("### Word Cloud")
-    grouped= out_df.groupby("Language", sort=False)
-
-    for lang, group in grouped: 
-        text_blob = " ".join(group["Cleaned_text"].astype(str)).strip()
-
-        text_blob = re.sub(r"http\S+|www\S+", "", text_blob)
-
-        if lang in ['zh-cn', 'zh-tw', 'zh-hant']:
-            words= jieba.cut(text_blob, cut_all= False)
-            segmented_text = " ".join(words)
-            wordcloud= WordCloud(
-                font_path= font_path, 
-                width= 800, 
-                height= 400, 
-                background_color= 'white'
-            ).generate(segmented_text)
-        else:
-            wordcloud = WordCloud(
-                width=800, 
-                height=400, 
-                background_color='white'
-            ).generate(text_blob)
-
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.imshow(wordcloud, interpolation='bilinear')
-        ax.axis("off")
-        st.pyplot(fig)
-        break
+    # Word clouds (one per symptom)
+    render_wordclouds_by_label(out_df)
 
 def handle_enter_text_flow():
     user_input = st.text_area("Text:")
