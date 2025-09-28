@@ -296,50 +296,50 @@ def render_wordcloud_for_language(df: pd.DataFrame, lang: str):
     st.pyplot(fig)
 
 def render_wordclouds_by_label(df: pd.DataFrame):
-    """One word cloud per predicted label (symptom), across languages."""
-    st.markdown("### Word Clouds by Symptom")
+    """One word cloud per predicted label **and language**."""
+    st.markdown("### Word Clouds by Symptom and Language")
 
     if df.empty or "Predicted Label" not in df.columns:
         st.info("No predictions to render word clouds.")
         return
     
-    # Exclude Unknown (handles None/NaN/empty safely)
+    # Exclude Unknown
     df = df[df["Predicted Label"].astype(str).str.strip().str.lower() != "unknown"]
     if df.empty:
         st.info("No non-unknown predictions to render word clouds.")
         return
 
-    for label, group in df.groupby("Predicted Label", sort=False):
-        # Collect text for this label
+    # Group by both label and language
+    for (label, lang), group in df.groupby(["Predicted Label", "Language"], sort=False):
         blob_parts = []
 
-        # EN + MS can be used as-is
-        en_ms = group.loc[group["Language"].isin(["en", "ms"]), "Cleaned_text"].astype(str).tolist()
-        if en_ms:
-            blob_parts.append(" ".join(en_ms))
+        if lang in ["en", "ms"]:  # English & Malay
+            texts = group["Cleaned_text"].astype(str).tolist()
+            if texts:
+                blob_parts.append(" ".join(texts))
 
-        # Chinese languages: segment first so WordCloud sees 'words'
-        zh_mask = group["Language"].isin(["zh-cn", "zh-tw", "zh-hant"])
-        zh_texts = group.loc[zh_mask, "Cleaned_text"].astype(str).tolist()
-        if zh_texts:
-            zh_joined = "".join(zh_texts)                       # remove spaces between chars if any
-            zh_segmented = " ".join(jieba.cut(zh_joined, cut_all=False))
-            blob_parts.append(zh_segmented)
+        elif lang in ["zh-cn", "zh-tw", "zh-hant"]:  # Mandarin & Cantonese
+            zh_texts = group["Cleaned_text"].astype(str).tolist()
+            if zh_texts:
+                zh_joined = "".join(zh_texts)
+                zh_segmented = " ".join(jieba.cut(zh_joined, cut_all=False))
+                blob_parts.append(zh_segmented)
 
-        blob = " ".join(blob_parts)
-        blob = re.sub(r"http\S+|www\S+", "", blob).strip()
+        blob = " ".join(blob_parts).strip()
+        blob = re.sub(r"http\S+|www\S+", "", blob)
+
         if not blob:
-            st.caption(f"*No text for {label}*")
+            st.caption(f"*No text for {label} ({lang})*")
             continue
 
         wc = WordCloud(
-            font_path=str(font_path),  # Path -> str
+            font_path=str(font_path),
             width=900,
             height=420,
             background_color="white"
         ).generate(blob)
 
-        st.subheader(str(label))
+        st.subheader(f"{label} ({LANG_DISPLAY.get(lang, lang)})")
         fig, ax = plt.subplots(figsize=(10, 4.6))
         ax.imshow(wc, interpolation="bilinear")
         ax.axis("off")
@@ -378,34 +378,41 @@ def handle_upload_flow():
     st.dataframe(out_df[["Text", "Predicted Label"]], use_container_width=True)
     st.download_button("Download Predictions", out_df.to_csv(index=False), "Predictions.csv", "text/csv")
 
-    # Pie chart 
-    st.markdown("### Distribution of Predicted Mental Health Categories")
+    # Pie charts by language 
+    st.markdown("### Distribution of Mental Health Category")
 
+    # filter out Unknown predictions
     filtered = out_df[
         out_df["Predicted Label"]
-          .astype(str)
-          .str.strip()
-          .str.lower()
+          .astype(str).str.strip().str.lower()
           .ne("unknown")
-    ]
+    ].copy()
 
     if filtered.empty:
         st.info("All predictions are 'Unknown'")
     else:
-        label_counts = (
-            filtered["Predicted Label"]
-            .value_counts()
-            .rename_axis("Mental Health Category")
-            .reset_index(name="Count")
-        )
-        fig_pie = px.pie(
-            label_counts,
-            names="Mental Health Category",
-            values="Count",
-            title="Mental Health Category Distribution"
-        )
-        st.plotly_chart(fig_pie, use_container_width=True)
+        filtered["LanguageName"] = filtered["Language"].map(LANG_DISPLAY).fillna(filtered["Language"])
 
+    # aggregate counts per (Language, Label)
+    label_lang_counts = (
+        filtered.groupby(["LanguageName", "Predicted Label"])
+                .size()
+                .reset_index(name="Count")
+    )
+
+    # one pie per language 
+    fig_pies = px.pie(
+        label_lang_counts,
+        names="Predicted Label",
+        values="Count",
+        facet_col="LanguageName",        
+        title="Mental Health Category Distribution by Language (excluding 'Unknown')",
+        hole=0.3
+    )
+    # clean facet titles
+    fig_pies.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+    st.plotly_chart(fig_pies, use_container_width=True)
+    
     # Word cloud 
     st.markdown("### Word Cloud")
     # Word clouds (one per symptom)
@@ -881,5 +888,6 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
