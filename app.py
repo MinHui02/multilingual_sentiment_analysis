@@ -406,8 +406,7 @@ def handle_upload_flow():
         names="Predicted Label",
         values="Count",
         facet_col="LanguageName",        
-        title="Mental Health Category Distribution by Language (excluding 'Unknown')",
-        hole=0.3
+        title="Mental Health Category Distribution"
     )
     # clean facet titles
     fig_pies.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
@@ -888,6 +887,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
