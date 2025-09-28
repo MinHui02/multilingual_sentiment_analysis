@@ -378,13 +378,33 @@ def handle_upload_flow():
     st.dataframe(out_df[["Text", "Predicted Label"]], use_container_width=True)
     st.download_button("Download Predictions", out_df.to_csv(index=False), "Predictions.csv", "text/csv")
 
-    # Pie chart
+    # Pie chart 
     st.markdown("### Distribution of Predicted Mental Health Categories")
-    label_counts = out_df["Predicted Label"].value_counts().reset_index()
-    label_counts.columns = ["Mental Health Category", "Count"]
-    fig_pie = px.pie(label_counts, names="Mental Health Category", values="Count",
-                     title="Mental Health Category Distribution")
-    st.plotly_chart(fig_pie, use_container_width=True)
+
+    filtered = out_df[
+        out_df["Predicted Label"]
+          .astype(str)
+          .str.strip()
+          .str.lower()
+          .ne("unknown")
+    ]
+
+    if filtered.empty:
+        st.info("All predictions are 'Unknown'")
+    else:
+        label_counts = (
+            filtered["Predicted Label"]
+            .value_counts()
+            .rename_axis("Mental Health Category")
+            .reset_index(name="Count")
+        )
+        fig_pie = px.pie(
+            label_counts,
+            names="Mental Health Category",
+            values="Count",
+            title="Mental Health Category Distribution"
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
 
     # Word cloud 
     st.markdown("### Word Cloud")
@@ -861,4 +881,5 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
