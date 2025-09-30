@@ -22,7 +22,9 @@ ENGLISH_MODEL_BUNDLE = "english_model_bundle.pkl"
 BM_MODEL_BUNDLE = "bm_model_bundle.pkl"
 MANDARIN_MODEL_BUNDLE = "mandarin_model_bundle.pkl"
 font_path = BASE_DIR / "SimHei.ttf"
-feedback_db= "feedback.db"
+DB_DIR = (BASE_DIR / "data")
+DB_DIR.mkdir(exist_ok=True)
+FEEDBACK_DB = str(DB_DIR / "feedback.db")
 
 LANG_DISPLAY = {
     "en": "English",
@@ -60,16 +62,21 @@ def get_malaya_tools():
 
 @st.cache_resource(show_spinner=False)
 def get_db():
-    conn = sqlite3.connect(feedback_db, check_same_thread=False)
+    conn = sqlite3.connect(
+        FEEDBACK_DB,
+        check_same_thread=False,   # Streamlit runs in a single process with threads
+        isolation_level=None       # autocommit
+    )
+    # Make SQLite more concurrent-friendly
     conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS feedback (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             Timestamp TEXT NOT NULL,
             Text TEXT NOT NULL
-        )
-    """) 
-    conn.commit()
+        );
+    """)
     return conn
 
 def add_feedback(conn, text: str):
@@ -887,6 +894,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
